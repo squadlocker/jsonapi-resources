@@ -15,7 +15,7 @@ module JSONAPI
     #              relationship ids in the links section for a resource. Fields are global for a resource type.
     #     Example: { people: [:id, :email, :comments], posts: [:id, :title, :author], comments: [:id, :body, :post]}
     # key_formatter: KeyFormatter instance to override the default configuration
-    # serializer_options: additional options that will be passed to resource meta and links lambdas
+    # serialization_options: additional options that will be passed to resource meta and links lambdas
 
     def initialize(primary_resource_klass, options = {})
       @primary_resource_klass = primary_resource_klass
@@ -298,8 +298,11 @@ module JSONAPI
       h = source.relationships || {}
       return h unless include_directives.has_key?(:include_related)
 
-      relationships = source.resource_klass._relationships.select{|k,v| source.fetchable_fields.include?(k) }
+      relationships = source.resource_klass._relationships.select do |k,v|
+        source.fetchable_fields.include?(k)
+      end
 
+      real_res = nil
       relationships.each do |rel_name, relationship|
         key = @key_formatter.format(rel_name)
         to_many = relationship.is_a? JSONAPI::Relationship::ToMany
@@ -310,7 +313,17 @@ module JSONAPI
             h[key][:data] = to_many ? [] : nil
           end
 
-          source.preloaded_fragments[key].each do |id, f|
+          fragments = source.preloaded_fragments[key]
+          if fragments.nil?
+            # The resources we want were not preloaded, we'll have to bypass the cache.
+            # This happens when including through belongs_to polymorphic relationships
+            if real_res.nil?
+              real_res = source.to_real_resource
+            end
+            relation_resources = [real_res.public_send(rel_name)].flatten(1).compact
+            fragments = relation_resources.map{|r| [r.id, r]}.to_h
+          end
+          fragments.each do |id, f|
             add_resource(f, ia)
 
             if h.has_key?(key)

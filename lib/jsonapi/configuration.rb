@@ -22,7 +22,9 @@ module JSONAPI
                 :top_level_meta_include_page_count,
                 :top_level_meta_page_count_key,
                 :allow_transactions,
+                :include_backtraces_in_errors,
                 :exception_class_whitelist,
+                :whitelist_all_exceptions,
                 :always_include_to_one_linkage_data,
                 :always_include_to_many_linkage_data,
                 :cache_formatters,
@@ -68,6 +70,10 @@ module JSONAPI
 
       self.use_text_errors = false
 
+      # Whether or not to include exception backtraces in JSONAPI error
+      # responses.  Defaults to `false` in production, and `true` otherwise.
+      self.include_backtraces_in_errors = !Rails.env.production?
+
       # List of classes that should not be rescued by the operations processor.
       # For example, if you use Pundit for authorization, you might
       # raise a Pundit::NotAuthorizedError at some point during operations
@@ -75,6 +81,10 @@ module JSONAPI
       # catch this error and render a 403 status code, you should add
       # the `Pundit::NotAuthorizedError` to the `exception_class_whitelist`.
       self.exception_class_whitelist = []
+
+      # If enabled, will override configuration option `exception_class_whitelist`
+      # and whitelist all exceptions.
+      self.whitelist_all_exceptions = false
 
       # Resource Linkage
       # Controls the serialization of resource linkage for non compound documents
@@ -183,7 +193,8 @@ module JSONAPI
     end
 
     def exception_class_whitelisted?(e)
-      @exception_class_whitelist.flatten.any? { |k| e.class.ancestors.map(&:to_s).include?(k.to_s) }
+      @whitelist_all_exceptions ||
+        @exception_class_whitelist.flatten.any? { |k| e.class.ancestors.map(&:to_s).include?(k.to_s) }
     end
 
     def default_processor_klass=(default_processor_klass)
@@ -212,7 +223,11 @@ module JSONAPI
 
     attr_writer :allow_transactions
 
+    attr_writer :include_backtraces_in_errors
+
     attr_writer :exception_class_whitelist
+
+    attr_writer :whitelist_all_exceptions
 
     attr_writer :always_include_to_one_linkage_data
 

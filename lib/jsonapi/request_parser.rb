@@ -34,6 +34,7 @@ module JSONAPI
 
       setup_action_method_name = "setup_#{params[:action]}_action"
       if respond_to?(setup_action_method_name)
+        raise params[:_parser_exception] if params[:_parser_exception]
         send(setup_action_method_name, params)
       end
     rescue ActionController::ParameterMissing => e
@@ -201,7 +202,7 @@ module JSONAPI
       relationship = resource_klass._relationship(relationship_name)
       if relationship && format_key(relationship_name) == include_parts.first
         unless include_parts.last.empty?
-          check_include(Resource.resource_for(@resource_klass.module_path + relationship.class_name.to_s.underscore), include_parts.last.partition('.'))
+          check_include(Resource.resource_for(resource_klass.module_path + relationship.class_name.to_s.underscore), include_parts.last.partition('.'))
         end
       else
         @errors.concat(JSONAPI::Exceptions::InvalidInclude.new(format_key(resource_klass._type),

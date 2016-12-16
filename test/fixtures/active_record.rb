@@ -572,6 +572,9 @@ class Document < ActiveRecord::Base
   has_many :pictures, as: :imageable
 end
 
+class Document::Topic < Document
+end
+
 class Product < ActiveRecord::Base
   has_one :picture, as: :imageable
 end
@@ -714,6 +717,9 @@ class BoatsController < JSONAPI::ResourceController
 end
 
 class BooksController < JSONAPI::ResourceController
+  def context
+    { title: 'Title' }
+  end
 end
 
 ### CONTROLLERS
@@ -1209,6 +1215,11 @@ class DocumentResource < JSONAPI::Resource
   has_many :pictures
 end
 
+class TopicResource < JSONAPI::Resource
+  model_name 'Document::Topic'
+  has_many :pictures
+end
+
 class ProductResource < JSONAPI::Resource
   attribute :name
   has_one :picture, always_include_linkage_data: true
@@ -1238,7 +1249,13 @@ class AuthorResource < JSONAPI::Resource
 end
 
 class BookResource < JSONAPI::Resource
+  attribute :title
+
   has_many :authors, class_name: 'Author', inverse_relationship: :books
+
+  def title
+    context[:title]
+  end
 end
 
 class AuthorDetailResource < JSONAPI::Resource

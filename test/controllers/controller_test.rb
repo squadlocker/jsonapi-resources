@@ -56,6 +56,13 @@ class PostsControllerTest < ActionController::TestCase
     assert_response :success
   end
 
+  def test_accept_header_all_modified
+    @request.headers['Accept'] = "*/*;q=0.8"
+
+    assert_cacheable_get :index
+    assert_response :success
+  end
+
   def test_accept_header_not_jsonapi
     @request.headers['Accept'] = 'text/plain'
 
@@ -81,6 +88,39 @@ class PostsControllerTest < ActionController::TestCase
   ensure
     $PostProcessorRaisesErrors = false
     JSONAPI.configuration.exception_class_whitelist = original_whitelist
+  end
+
+  def test_whitelist_all_exceptions
+    original_config = JSONAPI.configuration.whitelist_all_exceptions
+    $PostProcessorRaisesErrors = true
+    assert_cacheable_get :index
+    assert_response 500
+
+    JSONAPI.configuration.whitelist_all_exceptions = true
+    assert_cacheable_get :index
+    assert_response 403
+  ensure
+    $PostProcessorRaisesErrors = false
+    JSONAPI.configuration.whitelist_all_exceptions = original_config
+  end
+
+  def test_exception_includes_backtrace_when_enabled
+    original_config = JSONAPI.configuration.include_backtraces_in_errors
+    $PostProcessorRaisesErrors = true
+
+    JSONAPI.configuration.include_backtraces_in_errors = true
+    assert_cacheable_get :index
+    assert_response 500
+    assert_includes @response.body, "backtrace", "expected backtrace in error body"
+
+    JSONAPI.configuration.include_backtraces_in_errors = false
+    assert_cacheable_get :index
+    assert_response 500
+    refute_includes @response.body, "backtrace", "expected backtrace in error body"
+
+  ensure
+    $PostProcessorRaisesErrors = false
+    JSONAPI.configuration.include_backtraces_in_errors = original_config
   end
 
   def test_on_server_error_block_callback_with_exception
@@ -1883,6 +1923,36 @@ class TagsControllerTest < ActionController::TestCase
   end
 end
 
+class PicturesControllerTest < ActionController::TestCase
+  def test_pictures_index
+    assert_cacheable_get :index
+    assert_response :success
+    assert_equal 3, json_response['data'].size
+  end
+
+  def test_pictures_index_with_polymorphic_include_one_level
+    assert_cacheable_get :index, params: {include: 'imageable'}
+    assert_response :success
+    assert_equal 3, json_response['data'].size
+    assert_equal 2, json_response['included'].size
+  end
+end
+
+class DocumentsControllerTest < ActionController::TestCase
+  def test_documents_index
+    assert_cacheable_get :index
+    assert_response :success
+    assert_equal 1, json_response['data'].size
+  end
+
+  def test_documents_index_with_polymorphic_include_one_level
+    assert_cacheable_get :index, params: {include: 'pictures'}
+    assert_response :success
+    assert_equal 1, json_response['data'].size
+    assert_equal 1, json_response['included'].size
+  end
+end
+
 class ExpenseEntriesControllerTest < ActionController::TestCase
   def setup
     JSONAPI.configuration.json_key_format = :camelized_key
@@ -2410,6 +2480,12 @@ class BooksControllerTest < ActionController::TestCase
 
   ensure
     JSONAPI.configuration.use_relationship_reflection = false
+  end
+
+  def test_index_with_caching_enabled_uses_context
+    assert_cacheable_get :index
+    assert_response :success
+    assert json_response['data'][0]['attributes']['title'] = 'Title'
   end
 end
 

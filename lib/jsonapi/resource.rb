@@ -324,7 +324,7 @@ module JSONAPI
       relationship = self.class._relationships[relationship_type.to_sym]
 
       _model.public_send("#{relationship.foreign_key}=", key_value)
-      _model.public_send("#{relationship.polymorphic_type}=", key_type.to_s.classify)
+      _model.public_send("#{relationship.polymorphic_type}=", self.class.model_name_for_type(key_type))
 
       @save_needed = true
 
@@ -459,6 +459,12 @@ module JSONAPI
         else
           model_name.rpartition('/').last
         end
+      end
+
+      def model_name_for_type(key_type)
+        type_class_name = key_type.to_s.classify
+        resource = resource_for(type_class_name)
+        resource ? resource._model_name.to_s : type_class_name
       end
 
       attr_accessor :_attributes, :_relationships, :_type, :_model_hints
@@ -1034,7 +1040,7 @@ module JSONAPI
           cache_ids = pluck_arel_attributes(records, t[_primary_key], t[_cache_field])
           resources = CachedResourceFragment.fetch_fragments(self, serializer, options[:context], cache_ids)
         else
-          resources = resources_for(records, options).map{|r| [r.id, r] }.to_h
+          resources = resources_for(records, options[:context]).map{|r| [r.id, r] }.to_h
         end
 
         preload_included_fragments(resources, records, serializer, options)
@@ -1127,8 +1133,15 @@ module JSONAPI
 
           # For each step on the path, figure out what the actual table name/alias in the join
           # will be, and include the primary key of that table in our list of fields to select
+          non_polymorphic = true
           path.each do |elem|
             relationship = klass._relationships[elem]
+            if relationship.polymorphic
+              # Can't preload through a polymorphic belongs_to association, ResourceSerializer
+              # will just have to bypass the cache and load the real Resource.
+              non_polymorphic = false
+              break
+            end
             assocs_path << relationship.relation_name(options).to_sym
             # Converts [:a, :b, :c] to Rails-style { :a => { :b => :c }}
             ar_hash = assocs_path.reverse.reduce{|memo, step| { step => memo } }
@@ -1142,6 +1155,7 @@ module JSONAPI
             klass = relationship.resource_klass
             pluck_attrs << table[klass._primary_key]
           end
+          next unless non_polymorphic
 
           # Pre-fill empty hashes for each resource up to the end of the path.
           # This allows us to later distinguish between a preload that returned nothing
